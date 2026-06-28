@@ -1,21 +1,26 @@
 # ===============================================================
-#  CSoT'26 Low Latency — Week 1 Project
-#  Starter CMakeLists.txt. Customize as needed.
+#  CSoT'26 Low Latency — Week 2 Project (cache simulator)
+#  Starter CMakeLists.txt. Extends the Week-1 template.
 #
-#  Build (Release, the default):
+#  Build (Release, the default) with the shipped stub:
 #      cmake -B build && cmake --build build -j
+#      ./build/cache_sim_runner data/tiny.trace
+#
+#  Build YOUR simulator instead of the stub:
+#      cmake -B build -DCSOT_CACHE_SIM_SRC=cache_sim.cpp
+#      cmake --build build -j
+#
+#  Build the way the judge does (portable baseline, no -march=native):
+#      cmake -B build-judge -DCSOT_JUDGE_BUILD=ON -DCSOT_CACHE_SIM_SRC=cache_sim.cpp
+#      cmake --build build-judge -j
 #
 #  Build with sanitizers (debug runs, NOT for benchmarks):
 #      cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
 #      cmake --build build-asan -j
-#
-#  Run:
-#      ./build/quant_runner path/to/your_strategy.so data/synthetic_small.csv
-#      ./build/quant_bench
 # ===============================================================
 
 cmake_minimum_required(VERSION 3.20)
-project(csot_quant_platform CXX)
+project(csot_cache_sim CXX)
 
 set(CMAKE_CXX_STANDARD          20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +34,17 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
                  Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
+# Which translation unit holds your simulator. Defaults to the shipped stub so
+# a fresh checkout builds; point it at your own file once you start writing.
+set(CSOT_CACHE_SIM_SRC "samples/cache_sim.stub.cpp"
+    CACHE STRING "Path to the single .cpp implementing create_cache_sim()")
+
+# CSOT_JUDGE_BUILD mirrors the judge toolchain: a portable ISA baseline instead
+# of -march=native, so a binary built here behaves like the one the judge
+# builds from your upload. Turn it ON before trusting your numbers as
+# "judge-like"; leave it OFF for the fastest local builds on your own CPU.
+option(CSOT_JUDGE_BUILD "Build with the judge's portable flags (-march=x86-64-v2)" OFF)
+
 # -------- Warnings --------
 add_compile_options(
     -Wall -Wextra -Wpedantic
@@ -38,9 +54,13 @@ add_compile_options(
 )
 
 # -------- Tuning (Release only) --------
-add_compile_options($<$<CONFIG:Release>:-O2>)
-add_compile_options($<$<CONFIG:Release>:-march=native>)
+add_compile_options($<$<CONFIG:Release>:-O3>)
 add_compile_options($<$<CONFIG:Release>:-fno-omit-frame-pointer>)   # better perf/flame-graph stacks
+if(CSOT_JUDGE_BUILD)
+    add_compile_options($<$<CONFIG:Release>:-march=x86-64-v2>)
+else()
+    add_compile_options($<$<CONFIG:Release>:-march=native>)
+endif()
 
 # -------- Optional: sanitizers --------
 option(ENABLE_SANITIZERS "Build with AddressSanitizer + UBSan" OFF)
@@ -64,38 +84,18 @@ endif()
 # -------- Include path --------
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# -------- Engine library --------
-# Uncomment when you've written src/engine.cpp.
-add_library(engine STATIC src/engine.cpp)
-target_link_libraries(engine PUBLIC ${CMAKE_DL_LIBS})   # dlopen / dlsym
-
-# -------- Main runner --------
-# CLI: ./quant_runner <strategy.so> <ticks.csv>
-# Uncomment when you've written src/main.cpp.
-# add_executable(quant_runner src/main.cpp)
-# target_link_libraries(quant_runner PRIVATE engine)
-
-# -------- A sample strategy as a shared library --------
-# The engine will dlopen this and call create_strategy().
-# Uncomment when you've written strategies/spec_strategy.cpp.
-# add_library(spec_strategy SHARED strategies/spec_strategy.cpp)
-# set_target_properties(spec_strategy PROPERTIES PREFIX "")   # produce "spec_strategy.so" not "libspec_strategy.so"
-
-# -------- Benchmarks (Google Benchmark) --------
-# Uncomment when you've written bench/bench.cpp.
-# find_package(benchmark REQUIRED)
-# add_executable(quant_bench bench/bench.cpp)
-# target_link_libraries(quant_bench PRIVATE engine benchmark::benchmark)
-
-# -------- Purely For Testing Cmake --------
-# add_executable(test testing.cpp)
-
+# -------- Local runner --------
+# Links the shipped harness main() against your simulator translation unit.
+# CLI: ./cache_sim_runner <trace_file>
+add_executable(cache_sim_runner harness/main.cpp ${CSOT_CACHE_SIM_SRC})
 
 # ===============================================================
 # Help message after first configure
 message(STATUS "")
 message(STATUS "================================================================")
 message(STATUS "  Build type:        ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Simulator source:  ${CSOT_CACHE_SIM_SRC}")
+message(STATUS "  Judge build:       ${CSOT_JUDGE_BUILD}")
 message(STATUS "  Sanitizers:        ${ENABLE_SANITIZERS}")
 message(STATUS "  LTO (Release):     ${ENABLE_LTO}")
 message(STATUS "  Compiler:          ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")

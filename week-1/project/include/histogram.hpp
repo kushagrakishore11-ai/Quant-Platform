@@ -3,7 +3,7 @@
 //
 //  Minimal fixed-bucket latency histogram for the replay engine.
 //
-//  Buckets are exponential: bucket i covers [2^i ns, 2^(i+1) ns).
+//  Buckets are exponential: bucket i covers [2^i ns, 2^(i+1) ns). i starts from 0 
 //  With N=32 buckets we cover 0 ns ... ~4.3 seconds, which is plenty for
 //  per-tick latencies on any sane strategy. Each record() is ~3 instructions
 //  (clz + array bump), so this is itself safe to put on the hot path.
